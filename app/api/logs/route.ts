@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
     data: {
       userId: user.id,
       action: action.trim().slice(0, 120),
-      details: details ?? undefined,
+      details: (details ?? undefined) as Prisma.InputJsonValue | undefined,
     },
   });
   return NextResponse.json({ ok: true });
