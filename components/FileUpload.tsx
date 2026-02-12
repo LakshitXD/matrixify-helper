@@ -25,6 +25,9 @@ import {
   importProfilesFromJson,
 } from "@/lib/profileStorage";
 import { MappingEditor } from "@/components/MappingEditor";
+import { MetafieldsWizard } from "@/components/MetafieldsWizard";
+import { BulkSplitter } from "@/components/BulkSplitter";
+import { SaveSnapshotButton } from "@/components/SaveSnapshotButton";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -403,16 +406,25 @@ export function FileUpload() {
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <h2 className="text-lg font-semibold">Validation results</h2>
-            {result.headers && result.rows && result.rows.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDownloadFixedCsv}
-              >
-                Download fixed CSV
-              </Button>
-            )}
-          </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {result.headers && result.rows && result.rows.length > 0 && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDownloadFixedCsv}
+                    >
+                      Download fixed CSV
+                    </Button>
+                    <SaveSnapshotButton
+                      headers={result.headers}
+                      rows={result.rows}
+                      primaryKey="Handle"
+                    />
+                  </>
+                )}
+              </div>
+            </div>
           <ResultsPanel
             result={result}
             imageIssue={imageIssue}
@@ -424,6 +436,16 @@ export function FileUpload() {
           </div>
         </div>
       )}
+
+      <section className="space-y-2">
+        <h2 className="text-lg font-semibold">Bulk File Splitter</h2>
+        <BulkSplitter />
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-lg font-semibold">Metafields Wizard</h2>
+        <MetafieldsWizard existingHeaders={result?.headers ?? []} />
+      </section>
     </div>
   );
 }

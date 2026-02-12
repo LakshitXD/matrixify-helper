@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { Analytics } from "@vercel/analytics/react";
+import { Providers } from "@/components/Providers";
 import "./globals.css";
 
 const geistSans = localFont({
@@ -31,7 +32,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-neutral-100`}
         suppressHydrationWarning
       >
-        {children}
+        <Providers>{children}</Providers>
         <Analytics />
       </body>
     </html>

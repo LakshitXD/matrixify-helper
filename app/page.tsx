@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { FileUpload } from "@/components/FileUpload";
 
 export default function Home() {
@@ -5,6 +6,14 @@ export default function Home() {
     <div className="min-h-screen bg-neutral-100 px-4 py-12 sm:px-6 sm:py-16 md:py-20">
       <div className="mx-auto max-w-[900px] space-y-10">
         <header className="space-y-3 text-center">
+          <div className="flex justify-end">
+            <Link
+              href="/dashboard"
+              className="text-sm font-medium text-neutral-600 hover:text-neutral-900"
+            >
+              Dashboard
+            </Link>
+          </div>
           <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 sm:text-3xl">
             Fix Your Matrixify Import Errors Before Uploading
           </h1>
