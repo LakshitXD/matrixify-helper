@@ -47,10 +47,5 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn() {
       return true;
     },
-    authorized({ auth, request }) {
-      const isDashboard = request.nextUrl.pathname.startsWith("/dashboard");
-      if (isDashboard && !auth) return false;
-      return true;
-    },
   },
 });
