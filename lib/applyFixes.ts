@@ -52,6 +52,22 @@ export function applyFix(
       });
       return { headers: [...headers], rows: newRows };
     }
+    case "clear_broken_images": {
+      const payload = fix.payload as {
+        cells?: { row: number; column: string }[];
+      } | undefined;
+      const cells = payload?.cells ?? [];
+      const clearSet = new Set(cells.map((c) => `${c.row}:${c.column}`));
+      const newRows = rows.map((row, index) => {
+        const displayRow = index + 2;
+        const out = { ...row };
+        for (const col of headers) {
+          if (clearSet.has(`${displayRow}:${col}`)) out[col] = "";
+        }
+        return out;
+      });
+      return { headers: [...headers], rows: newRows };
+    }
     default:
       return { headers: [...headers], rows: rows.map((r) => ({ ...r })) };
   }

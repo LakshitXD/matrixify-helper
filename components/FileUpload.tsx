@@ -14,6 +14,11 @@ import { parseCsv, serializeToCsv } from "@/lib/csvParser";
 import { autoMap, applyMapping } from "@/lib/fieldMapper";
 import { runAllValidators } from "@/lib/validators";
 import {
+  collectImageUrls,
+  mapFailedUrlsToCells,
+  type ImageCheckApiResult,
+} from "@/lib/imageValidation";
+import {
   getProfiles,
   saveProfile,
   exportProfilesToJson,
@@ -32,6 +37,8 @@ export function FileUpload() {
   const [profiles, setProfiles] = useState<MappingProfile[]>([]);
   const [loadedProfileMapping, setLoadedProfileMapping] =
     useState<ColumnMapping | null>(null);
+  const [imageIssue, setImageIssue] = useState<ValidationIssue | null>(null);
+  const [imageChecking, setImageChecking] = useState(false);
 
   useEffect(() => {
     setProfiles(getProfiles());
@@ -112,6 +119,43 @@ export function FileUpload() {
 
       setResult(data as ValidationResponse);
       setLoadedProfileMapping(null);
+      setImageIssue(null);
+      const payload = data as ValidationResponse;
+      if (payload.headers?.length && payload.rows?.length) {
+        setImageChecking(true);
+        const urlWithCells = collectImageUrls(payload.headers, payload.rows);
+        const urls = urlWithCells.map((u) => u.url);
+        if (urls.length > 0) {
+          try {
+            const imgRes = await fetch("/api/validate-images", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ urls }),
+            });
+            const imgData = await imgRes.json();
+            const results = (imgData.results ?? []) as ImageCheckApiResult[];
+            const brokenCells = mapFailedUrlsToCells(urlWithCells, results);
+            if (brokenCells.length > 0) {
+              const affectedRows = [...new Set(brokenCells.map((c) => c.row))];
+              setImageIssue({
+                type: "warning",
+                title: "Broken image URLs",
+                description: `${brokenCells.length} image URL(s) could not be reached or returned an error.`,
+                rows: affectedRows,
+                cells: brokenCells,
+                suggestion: "Fix or remove the broken URLs, or clear them using the fix below.",
+                fix: {
+                  type: "clear_broken_images",
+                  payload: { cells: brokenCells },
+                },
+              });
+            }
+          } catch {
+            setImageIssue(null);
+          }
+        }
+        setImageChecking(false);
+      }
     } catch {
       setError("Something went wrong. Please try again.");
       setResult(null);
@@ -147,6 +191,7 @@ export function FileUpload() {
         }
         return;
       }
+      if (issue.fix.type === "clear_broken_images") setImageIssue(null);
       const { headers: newHeaders, rows: newRows } = applyFix(
         result.headers,
         result.rows,
@@ -225,6 +270,59 @@ export function FileUpload() {
     a.click();
     URL.revokeObjectURL(url);
   }, [result, file?.name]);
+
+  const handleCellChange = useCallback(
+    (rowIndex: number, header: string, value: string) => {
+      if (!result?.headers || !result?.rows) return;
+      const newRows = result.rows.map((r, i) =>
+        i === rowIndex ? { ...r, [header]: value } : r
+      );
+      const issues = runAllValidators(result.headers, newRows);
+      const hasError = issues.some((i) => i.type === "error");
+      setResult({
+        ...result,
+        success: !hasError,
+        issues,
+        rows: newRows,
+      });
+    },
+    [result]
+  );
+
+  const handleDownloadErrorReport = useCallback(() => {
+    if (!result?.headers || !result?.rows || !result?.issues?.length) return;
+    const allIssueRows = new Set<number>();
+    for (const i of result.issues) {
+      for (const r of i.rows ?? []) allIssueRows.add(r);
+      for (const c of i.cells ?? []) allIssueRows.add(c.row);
+    }
+    const problemRowNumbers = Array.from(allIssueRows).sort((a, b) => a - b);
+    const problemRowsData = result.rows.filter((_, index) =>
+      problemRowNumbers.includes(index + 2)
+    );
+    const report = {
+      generatedAt: new Date().toISOString(),
+      summary: result.issues.map(({ type, title, description, rows, cells, suggestion }) => ({
+        type,
+        title,
+        description,
+        rows,
+        cells,
+        suggestion,
+      })),
+      problemRowNumbers,
+      problemRowsData,
+      headers: result.headers,
+    };
+    const json = JSON.stringify(report, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "matrixify-error-report.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [result]);
 
   const canSubmit = file && !error && !loading;
 
@@ -317,7 +415,11 @@ export function FileUpload() {
           </div>
           <ResultsPanel
             result={result}
+            imageIssue={imageIssue}
+            imageChecking={imageChecking}
             onApplyFix={handleApplyFix}
+            onCellChange={handleCellChange}
+            onDownloadErrorReport={handleDownloadErrorReport}
           />
           </div>
         </div>

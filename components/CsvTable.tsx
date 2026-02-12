@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import type { ValidationIssue } from "@/types/validation";
 import { cn } from "@/lib/utils";
 
@@ -12,7 +13,19 @@ type CsvTableProps = {
   issues: ValidationIssue[];
   /** Row number (1-based, 2 = first data row) to briefly highlight after scroll */
   highlightedRow?: number | null;
+  /** When set, cells are editable; on blur/Enter this is called with 0-based rowIndex */
+  onCellChange?: (rowIndex: number, header: string, value: string) => void;
 };
+
+function getBrokenCellSet(issues: ValidationIssue[]): Set<string> {
+  const set = new Set<string>();
+  for (const issue of issues) {
+    for (const c of issue.cells ?? []) {
+      set.add(`${c.row}:${c.column}`);
+    }
+  }
+  return set;
+}
 
 function getRowHighlight(
   displayRowNumber: number,
@@ -35,7 +48,16 @@ export function CsvTable({
   rows,
   issues,
   highlightedRow = null,
+  onCellChange,
 }: CsvTableProps) {
+  const brokenCells = useMemo(() => getBrokenCellSet(issues), [issues]);
+  const editable = !!onCellChange;
+  const [editingCell, setEditingCell] = useState<{
+    rowIndex: number;
+    header: string;
+    value: string;
+  } | null>(null);
+
   return (
     <div
       id={CSV_TABLE_CONTAINER_ID}
@@ -81,15 +103,65 @@ export function CsvTable({
                   <td className="sticky left-0 z-10 px-3 py-2 font-medium text-muted-foreground border-r border-border bg-inherit">
                     {displayRow}
                   </td>
-                  {headers.map((h) => (
-                    <td
-                      key={h}
-                      className="min-w-[120px] max-w-[240px] px-3 py-2 whitespace-nowrap truncate"
-                      title={String(row[h] ?? "")}
-                    >
-                      {row[h] ?? ""}
-                    </td>
-                  ))}
+                  {headers.map((h) => {
+                    const cellKey = `${displayRow}:${h}`;
+                    const isBrokenCell = brokenCells.has(cellKey);
+                    const value = row[h] ?? "";
+                    return (
+                      <td
+                        key={h}
+                        className={cn(
+                          "min-w-[120px] max-w-[240px] px-3 py-2 whitespace-nowrap",
+                          !editable && "truncate",
+                          isBrokenCell &&
+                            "border border-red-400 bg-red-100/80 dark:bg-red-950/40"
+                        )}
+                        title={editable ? undefined : String(value)}
+                      >
+                        {editable ? (
+                          <input
+                            type="text"
+                            className="w-full min-w-0 rounded border-0 bg-transparent px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                            value={
+                              editingCell?.rowIndex === index &&
+                              editingCell?.header === h
+                                ? editingCell.value
+                                : value
+                            }
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setEditingCell((prev) =>
+                                prev?.rowIndex === index && prev?.header === h
+                                  ? { ...prev, value: v }
+                                  : { rowIndex: index, header: h, value: v }
+                              );
+                            }}
+                            onFocus={() =>
+                              setEditingCell({
+                                rowIndex: index,
+                                header: h,
+                                value,
+                              })
+                            }
+                            onBlur={(e) => {
+                              const current = e.target.value;
+                              if (current !== value)
+                                onCellChange?.(index, h, current);
+                              setEditingCell(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.currentTarget.blur();
+                              }
+                            }}
+                            aria-label={`Row ${displayRow} ${h}`}
+                          />
+                        ) : (
+                          <span className="block truncate">{value}</span>
+                        )}
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}
