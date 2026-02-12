@@ -1,11 +1,25 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ResultsPanel } from "@/components/ResultsPanel";
 import type { ValidationResponse } from "@/types/validation";
+import type { ValidationIssue } from "@/types/validation";
+import type { ColumnMapping } from "@/types/mapping";
+import type { MappingProfile } from "@/types/mapping";
 import { cn } from "@/lib/utils";
+import { applyFix } from "@/lib/applyFixes";
+import { parseCsv, serializeToCsv } from "@/lib/csvParser";
+import { autoMap, applyMapping } from "@/lib/fieldMapper";
+import { runAllValidators } from "@/lib/validators";
+import {
+  getProfiles,
+  saveProfile,
+  exportProfilesToJson,
+  importProfilesFromJson,
+} from "@/lib/profileStorage";
+import { MappingEditor } from "@/components/MappingEditor";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -15,6 +29,13 @@ export function FileUpload() {
   const [result, setResult] = useState<ValidationResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [profiles, setProfiles] = useState<MappingProfile[]>([]);
+  const [loadedProfileMapping, setLoadedProfileMapping] =
+    useState<ColumnMapping | null>(null);
+
+  useEffect(() => {
+    setProfiles(getProfiles());
+  }, []);
 
   const validateFile = useCallback((f: File) => {
     if (!f.name.toLowerCase().endsWith(".csv")) {
@@ -90,6 +111,7 @@ export function FileUpload() {
       }
 
       setResult(data as ValidationResponse);
+      setLoadedProfileMapping(null);
     } catch {
       setError("Something went wrong. Please try again.");
       setResult(null);
@@ -97,6 +119,112 @@ export function FileUpload() {
       setLoading(false);
     }
   }, [file, error]);
+
+  const handleApplyFix = useCallback(
+    async (issue: ValidationIssue) => {
+      if (!result?.headers || !result?.rows || !issue.fix) return;
+      if (issue.fix.type === "apply_encoding") {
+        const enc = (issue.fix.payload as { suggestedEncoding?: string })
+          ?.suggestedEncoding;
+        if (!enc || !file) return;
+        setLoading(true);
+        try {
+          const buffer = await file.arrayBuffer();
+          const decoded = new TextDecoder(enc).decode(buffer);
+          const parsed = parseCsv(decoded);
+          const issues = runAllValidators(parsed.headers, parsed.rows);
+          const hasError = issues.some((i) => i.type === "error");
+          setResult({
+            success: !hasError,
+            issues,
+            headers: parsed.headers,
+            rows: parsed.rows,
+          });
+        } catch {
+          setError("Could not re-encode file. Try saving as UTF-8 in your editor.");
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+      const { headers: newHeaders, rows: newRows } = applyFix(
+        result.headers,
+        result.rows,
+        issue
+      );
+      const issues = runAllValidators(newHeaders, newRows);
+      const hasError = issues.some((i) => i.type === "error");
+      setResult({
+        success: !hasError,
+        issues,
+        headers: newHeaders,
+        rows: newRows,
+      });
+    },
+    [result, file]
+  );
+
+  const handleLoadProfile = useCallback((profile: MappingProfile) => {
+    setLoadedProfileMapping(profile.mapping);
+  }, []);
+
+  const handleSaveProfile = useCallback((name: string, mapping: ColumnMapping) => {
+    saveProfile({ name, mapping });
+    setProfiles(getProfiles());
+  }, []);
+
+  const handleExportProfiles = useCallback(() => {
+    const json = exportProfilesToJson();
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "matrixify-helper-profiles.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handleImportProfiles = useCallback(async (file: File) => {
+    try {
+      const text = await file.text();
+      importProfilesFromJson(text);
+      setProfiles(getProfiles());
+    } catch {
+      setError("Invalid profiles file.");
+    }
+  }, []);
+
+  const handleApplyMapping = useCallback(
+    (mapping: Record<string, string>) => {
+      if (!result?.headers || !result?.rows) return;
+      const { headers: newHeaders, rows: newRows } = applyMapping(
+        result.headers,
+        result.rows,
+        mapping
+      );
+      const issues = runAllValidators(newHeaders, newRows);
+      const hasError = issues.some((i) => i.type === "error");
+      setResult({
+        success: !hasError,
+        issues,
+        headers: newHeaders,
+        rows: newRows,
+      });
+    },
+    [result]
+  );
+
+  const handleDownloadFixedCsv = useCallback(() => {
+    if (!result?.headers || !result?.rows) return;
+    const csv = serializeToCsv(result.headers, result.rows);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = file?.name?.replace(/\.csv$/i, "-fixed.csv") ?? "matrixify-fixed.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [result, file?.name]);
 
   const canSubmit = file && !error && !loading;
 
@@ -156,9 +284,42 @@ export function FileUpload() {
       </Card>
 
       {result && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold">Validation results</h2>
-          <ResultsPanel result={result} />
+        <div className="space-y-6">
+          {result.headers && result.headers.length > 0 && (
+            <section className="space-y-2">
+              <h2 className="text-lg font-semibold">Map fields</h2>
+              <MappingEditor
+                fileHeaders={result.headers}
+                initialMapping={
+                  loadedProfileMapping ?? autoMap(result.headers).mapping
+                }
+                onApply={handleApplyMapping}
+                profiles={profiles}
+                onLoadProfile={handleLoadProfile}
+                onSaveProfile={handleSaveProfile}
+                onExportProfiles={handleExportProfiles}
+                onImportProfiles={handleImportProfiles}
+              />
+            </section>
+          )}
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <h2 className="text-lg font-semibold">Validation results</h2>
+            {result.headers && result.rows && result.rows.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadFixedCsv}
+              >
+                Download fixed CSV
+              </Button>
+            )}
+          </div>
+          <ResultsPanel
+            result={result}
+            onApplyFix={handleApplyFix}
+          />
+          </div>
         </div>
       )}
     </div>

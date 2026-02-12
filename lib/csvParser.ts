@@ -23,3 +23,10 @@ export function parseCsv(csvString: string): ParseResult {
 
   return { headers, rows };
 }
+
+export function serializeToCsv(
+  headers: string[],
+  rows: Record<string, string>[]
+): string {
+  return Papa.unparse({ fields: headers, data: rows });
+}

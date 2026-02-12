@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import type { ValidationIssue } from "@/types/validation";
 import { cn } from "@/lib/utils";
 
@@ -15,14 +16,24 @@ type IssueCardProps = {
   className?: string;
   /** Called when user clicks to scroll to affected rows in the table */
   onGoToRows?: (rowNumbers: number[]) => void;
+  /** Called when user clicks Apply fix (only when issue has fix) */
+  onApplyFix?: (issue: ValidationIssue) => void;
 };
 
-export function IssueCard({ issue, className, onGoToRows }: IssueCardProps) {
+export function IssueCard({
+  issue,
+  className,
+  onGoToRows,
+  onApplyFix,
+}: IssueCardProps) {
   const isError = issue.type === "error";
   const hasRows = issue.rows && issue.rows.length > 0;
   const isClickable = !!onGoToRows;
+  const hasFix = !!issue.fix && !!onApplyFix;
 
-  const handleClick = () => {
+  const handleCardClick = (e: React.MouseEvent) => {
+    if (hasFix && (e.target as HTMLElement).closest("[data-apply-fix]"))
+      return;
     if (onGoToRows) onGoToRows(issue.rows ?? []);
   };
 
@@ -30,13 +41,15 @@ export function IssueCard({ issue, className, onGoToRows }: IssueCardProps) {
     <Card
       role={isClickable ? "button" : undefined}
       tabIndex={isClickable ? 0 : undefined}
-      onClick={isClickable ? handleClick : undefined}
+      onClick={isClickable ? handleCardClick : undefined}
       onKeyDown={
         isClickable
           ? (e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                handleClick();
+                if (hasFix && (e.target as HTMLElement).closest("[data-apply-fix]"))
+                  return;
+                if (onGoToRows) onGoToRows(issue.rows ?? []);
               }
             }
           : undefined
@@ -70,6 +83,20 @@ export function IssueCard({ issue, className, onGoToRows }: IssueCardProps) {
             <span className="font-medium">Suggestion: </span>
             {issue.suggestion}
           </p>
+        )}
+        {hasFix && (
+          <div data-apply-fix className="pt-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={(e) => {
+                e.stopPropagation();
+                onApplyFix?.(issue);
+              }}
+            >
+              Apply fix
+            </Button>
+          </div>
         )}
         {isClickable && (
           <p className="text-sm text-primary font-medium pt-1">

@@ -14,9 +14,10 @@ const HIGHLIGHT_DURATION_MS = 2500;
 
 type ResultsPanelProps = {
   result: ValidationResponse;
+  onApplyFix?: (issue: import("@/types/validation").ValidationIssue) => void;
 };
 
-export function ResultsPanel({ result }: ResultsPanelProps) {
+export function ResultsPanel({ result, onApplyFix }: ResultsPanelProps) {
   const { success, issues, headers, rows } = result;
   const errors = issues.filter((i) => i.type === "error");
   const warnings = issues.filter((i) => i.type === "warning");
@@ -111,6 +112,7 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
                     key={`error-${idx}`}
                     issue={issue}
                     onGoToRows={hasTableData ? scrollToRows : undefined}
+                    onApplyFix={onApplyFix}
                   />
                 ))}
               </div>
@@ -127,6 +129,7 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
                     key={`warning-${idx}`}
                     issue={issue}
                     onGoToRows={hasTableData ? scrollToRows : undefined}
+                    onApplyFix={onApplyFix}
                   />
                 ))}
               </div>

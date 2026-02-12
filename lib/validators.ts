@@ -1,6 +1,6 @@
 import type { ValidationIssue } from "@/types/validation";
 
-const REQUIRED_COLUMNS = [
+export const REQUIRED_COLUMNS = [
   "Handle",
   "Title",
   "Variant SKU",
@@ -59,6 +59,10 @@ export function validateRequiredColumns(
       title: "Missing required columns",
       description: `The following columns are required for Matrixify: ${missing.join(", ")}.`,
       suggestion: "Add the missing columns to your CSV header row.",
+      fix: {
+        type: "add_columns",
+        payload: { columnNames: [...missing] },
+      },
     },
   ];
 }
@@ -185,6 +189,40 @@ export function validateEmptyHandleWithMultipleVariants(
   ];
 }
 
+/** Control chars except tab, CR, LF; zero-width; BOM */
+const SPECIAL_CHAR_REGEX = /[\x00-\x08\x0B\x0C\x0E-\x1F\uFEFF\u200B-\u200D\u2060\u00AD]/u;
+
+function hasSpecialChars(s: string): boolean {
+  return SPECIAL_CHAR_REGEX.test(s);
+}
+
+export function validateSpecialCharacters(
+  headers: string[],
+  rows: Record<string, string>[]
+): ValidationIssue[] {
+  const affectedRows = new Set<number>();
+  rows.forEach((row, index) => {
+    for (const key of headers) {
+      const value = row[key] ?? "";
+      if (hasSpecialChars(value)) {
+        affectedRows.add(index + 2);
+        break;
+      }
+    }
+  });
+  if (affectedRows.size === 0) return [];
+  return [
+    {
+      type: "warning",
+      title: "Special characters detected",
+      description: `Control or non-printable characters found in ${affectedRows.size} row(s), which may break imports.`,
+      rows: Array.from(affectedRows),
+      suggestion: "Remove or replace special characters in the listed cells.",
+      fix: { type: "clean_special_chars", payload: {} },
+    },
+  ];
+}
+
 export function validateColumnNameMismatch(headers: string[]): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   for (const header of headers) {
@@ -197,6 +235,10 @@ export function validateColumnNameMismatch(headers: string[]): ValidationIssue[]
         title: "Column name may be incorrect",
         description: `Column "${header}" might be a typo.`,
         suggestion: `Use "${suggested}" for Matrixify compatibility.`,
+        fix: {
+          type: "rename_header",
+          payload: { from: header, to: suggested },
+        },
       });
     }
   }
@@ -212,6 +254,7 @@ export function runAllValidators(
   results.push(...validateDuplicateSkus(headers, rows));
   results.push(...validateMissingOptionValues(headers, rows));
   results.push(...validateEmptyHandleWithMultipleVariants(headers, rows));
+  results.push(...validateSpecialCharacters(headers, rows));
   results.push(...validateColumnNameMismatch(headers));
   return results;
 }

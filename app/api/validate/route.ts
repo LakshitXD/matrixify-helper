@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { parseCsv } from "@/lib/csvParser";
+import { detectEncodingIssue } from "@/lib/encoding";
 import { runAllValidators } from "@/lib/validators";
 import type { ValidationResponse } from "@/types/validation";
 
@@ -86,6 +87,8 @@ export async function POST(request: Request) {
   let headers: string[];
   let rows: Record<string, string>[];
 
+  const suggestedEncoding = detectEncodingIssue(csvString);
+
   try {
     const parsed = parseCsv(csvString);
     headers = parsed.headers;
@@ -108,12 +111,26 @@ export async function POST(request: Request) {
   }
 
   const issues = runAllValidators(headers, rows);
+  if (suggestedEncoding) {
+    issues.push({
+      type: "warning",
+      title: "File may not be UTF-8",
+      description: `The file may use a different encoding. Suggested: ${suggestedEncoding}.`,
+      suggestion:
+        "Re-save the CSV as UTF-8 in Excel/Sheets, or use the fix below.",
+      fix: {
+        type: "apply_encoding",
+        payload: { suggestedEncoding },
+      },
+    });
+  }
   const hasError = issues.some((i) => i.type === "error");
   const response: ValidationResponse = {
     success: !hasError,
     issues,
     headers,
     rows,
+    ...(suggestedEncoding && { suggestedEncoding }),
   };
 
   return NextResponse.json(response, {
