@@ -18,6 +18,7 @@ import {
   buildMetafieldHeaders,
   buildTemplateCsv,
 } from "@/lib/metafieldTemplate";
+import { logActivity } from "@/lib/activityLog";
 import { cn } from "@/lib/utils";
 import { Trash2, Plus } from "lucide-react";
 
@@ -67,6 +68,7 @@ export function MetafieldsWizard({ existingHeaders = [] }: MetafieldsWizardProps
     a.download = "matrixify-metafields-template.csv";
     a.click();
     URL.revokeObjectURL(url);
+    logActivity("template_generated", { metafieldCount: list.length });
   };
 
   return (

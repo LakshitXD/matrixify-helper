@@ -100,7 +100,7 @@ function SignInForm() {
 
           <p className="text-center text-sm text-muted-foreground">
             <Link href="/" className="underline hover:no-underline">
-              Back to validator
+              Back to home
             </Link>
           </p>
         </CardContent>

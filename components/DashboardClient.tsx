@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { parseCsv } from "@/lib/csvParser";
 import { serializeToCsv } from "@/lib/csvParser";
+import { logActivity } from "@/lib/activityLog";
 import { cn } from "@/lib/utils";
 
 type SnapshotSummary = {
@@ -22,8 +23,40 @@ type SnapshotSummary = {
   headerCount: number;
 };
 
+type ActivityLogEntry = {
+  id: string;
+  action: string;
+  details: Record<string, unknown> | null;
+  createdAt: string;
+};
+
+function formatActivityLabel(entry: ActivityLogEntry): string {
+  const d = entry.details ?? {};
+  switch (entry.action) {
+    case "validation_completed":
+      return `Validated ${String(d.fileName ?? "file")} – ${d.issueCount ?? 0} issues`;
+    case "fix_applied":
+      return `Fixed: ${d.issueTitle ?? entry.action}`;
+    case "mapping_applied":
+      return `Applied column mapping (${d.columnCount ?? 0} columns)`;
+    case "download_fixed_csv":
+      return `Downloaded fixed CSV: ${d.fileName ?? "file"}`;
+    case "snapshot_saved":
+      return `Saved snapshot: ${d.name ?? "unnamed"}`;
+    case "file_split":
+      return `Split ${d.fileName ?? "file"} into ${d.chunkCount ?? 0} chunks (${d.totalRows ?? 0} rows)`;
+    case "merge_completed":
+      return `Merged ${d.mergedRows ?? 0} rows${Number(d.keysNotFound) > 0 ? `, ${d.keysNotFound} keys not found` : ""}`;
+    case "template_generated":
+      return `Generated metafields template (${d.metafieldCount ?? 0} metafields)`;
+    default:
+      return entry.action.replace(/_/g, " ");
+  }
+}
+
 export function DashboardClient() {
   const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
+  const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [mergeSnapshotId, setMergeSnapshotId] = useState<string>("");
   const [mergePrimaryKey, setMergePrimaryKey] = useState<string>("");
@@ -48,9 +81,21 @@ export function DashboardClient() {
     }
   }, [mergeSnapshotId]);
 
+  const fetchActivityLogs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/logs?limit=30");
+      if (!res.ok) return;
+      const data = await res.json();
+      setActivityLogs(data.logs ?? []);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     fetchSnapshots();
-  }, [fetchSnapshots]);
+    fetchActivityLogs();
+  }, [fetchSnapshots, fetchActivityLogs]);
 
   const handleMerge = useCallback(async () => {
     if (!updateFile || !mergeSnapshotId || !mergePrimaryKey) return;
@@ -80,6 +125,10 @@ export function DashboardClient() {
         mergedRows: data.mergedRows,
         keysNotFound: data.keysNotFound ?? [],
       });
+      logActivity("merge_completed", {
+        mergedRows: data.mergedRows?.length ?? 0,
+        keysNotFound: (data.keysNotFound ?? []).length,
+      });
     } catch {
       setMergeError("Request failed");
     } finally {
@@ -103,6 +152,34 @@ export function DashboardClient() {
 
   return (
     <div className="space-y-8">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Recent activity</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Your validations, fixes, snapshots, splits, and merges. Sign in to see activity here.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {activityLogs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No activity yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {activityLogs.map((entry) => (
+                <li
+                  key={entry.id}
+                  className="flex flex-wrap items-baseline justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm"
+                >
+                  <span>{formatActivityLabel(entry)}</span>
+                  <span className="text-muted-foreground text-xs">
+                    {new Date(entry.createdAt).toLocaleString()}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Your snapshots</CardTitle>

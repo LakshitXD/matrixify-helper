@@ -7,6 +7,7 @@ import { parseCsv } from "@/lib/csvParser";
 import { serializeToCsv } from "@/lib/csvParser";
 import { splitCsv, type CsvChunk } from "@/lib/splitCsv";
 import { zipChunks } from "@/lib/zipChunks";
+import { logActivity } from "@/lib/activityLog";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_MAX_ROWS = 10_000;
@@ -46,7 +47,13 @@ export function BulkSplitter() {
       const { chunks, totalChunks } = splitCsv(headers, rows, maxRowsPerChunk);
       const elapsedMs = performance.now() - start;
       const baseName = file.name.replace(/\.csv$/i, "").trim() || "chunk";
+      const totalRows = rows.length;
       setResult({ chunks, elapsedMs, baseName });
+      logActivity("file_split", {
+        fileName: file.name,
+        chunkCount: totalChunks,
+        totalRows,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to split file.");
     } finally {

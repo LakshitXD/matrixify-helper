@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { logActivity } from "@/lib/activityLog";
 
 type SaveSnapshotButtonProps = {
   headers: string[];
@@ -47,7 +48,10 @@ export function SaveSnapshotButton({
           primaryKey: primaryKey ?? undefined,
         }),
       });
-      if (res.ok) setSaved(true);
+      if (res.ok) {
+        setSaved(true);
+        logActivity("snapshot_saved", { name: name.trim() });
+      }
     } finally {
       setSaving(false);
     }

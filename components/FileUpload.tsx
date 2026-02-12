@@ -25,9 +25,8 @@ import {
   importProfilesFromJson,
 } from "@/lib/profileStorage";
 import { MappingEditor } from "@/components/MappingEditor";
-import { MetafieldsWizard } from "@/components/MetafieldsWizard";
-import { BulkSplitter } from "@/components/BulkSplitter";
 import { SaveSnapshotButton } from "@/components/SaveSnapshotButton";
+import { logActivity } from "@/lib/activityLog";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -42,6 +41,7 @@ export function FileUpload() {
     useState<ColumnMapping | null>(null);
   const [imageIssue, setImageIssue] = useState<ValidationIssue | null>(null);
   const [imageChecking, setImageChecking] = useState(false);
+  const [fixesApplied, setFixesApplied] = useState<{ title: string; fixType: string }[]>([]);
 
   useEffect(() => {
     setProfiles(getProfiles());
@@ -62,6 +62,7 @@ export function FileUpload() {
   const handleFile = useCallback(
     (f: File | null) => {
       setResult(null);
+      setFixesApplied([]);
       setFile(f);
       if (f) validateFile(f);
       else setError(null);
@@ -123,7 +124,15 @@ export function FileUpload() {
       setResult(data as ValidationResponse);
       setLoadedProfileMapping(null);
       setImageIssue(null);
+      setFixesApplied([]);
       const payload = data as ValidationResponse;
+      const issueCount = payload.issues?.length ?? 0;
+      const hasError = issueCount > 0 && payload.issues?.some((i) => i.type === "error");
+      logActivity("validation_completed", {
+        fileName: file.name,
+        issueCount,
+        success: !hasError,
+      });
       if (payload.headers?.length && payload.rows?.length) {
         setImageChecking(true);
         const urlWithCells = collectImageUrls(payload.headers, payload.rows);
@@ -187,6 +196,8 @@ export function FileUpload() {
             headers: parsed.headers,
             rows: parsed.rows,
           });
+          setFixesApplied((prev) => [...prev, { title: issue.title, fixType: issue.fix!.type }]);
+          logActivity("fix_applied", { issueTitle: issue.title, fixType: issue.fix!.type });
         } catch {
           setError("Could not re-encode file. Try saving as UTF-8 in your editor.");
         } finally {
@@ -208,6 +219,8 @@ export function FileUpload() {
         headers: newHeaders,
         rows: newRows,
       });
+      setFixesApplied((prev) => [...prev, { title: issue.title, fixType: issue.fix!.type }]);
+      logActivity("fix_applied", { issueTitle: issue.title, fixType: issue.fix!.type });
     },
     [result, file]
   );
@@ -258,6 +271,7 @@ export function FileUpload() {
         headers: newHeaders,
         rows: newRows,
       });
+      logActivity("mapping_applied", { columnCount: Object.keys(mapping).length });
     },
     [result]
   );
@@ -272,6 +286,7 @@ export function FileUpload() {
     a.download = file?.name?.replace(/\.csv$/i, "-fixed.csv") ?? "matrixify-fixed.csv";
     a.click();
     URL.revokeObjectURL(url);
+    logActivity("download_fixed_csv", { fileName: file?.name ?? "fixed.csv" });
   }, [result, file?.name]);
 
   const handleCellChange = useCallback(
@@ -404,6 +419,23 @@ export function FileUpload() {
             </section>
           )}
           <div className="space-y-4">
+            {fixesApplied.length > 0 && (
+              <div className="rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-900 dark:bg-green-950/40">
+                <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                  Fixes applied this session
+                </p>
+                <ul className="mt-1 list-inside list-disc text-sm text-green-700 dark:text-green-300">
+                  {fixesApplied.map((f, i) => (
+                    <li key={i}>
+                      {f.title}
+                      {f.fixType !== "apply_encoding" && f.fixType !== "clear_broken_images" && (
+                        <span className="text-green-600 dark:text-green-400"> ({f.fixType})</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="flex flex-wrap items-center justify-between gap-4">
               <h2 className="text-lg font-semibold">Validation results</h2>
               <div className="flex flex-wrap items-center gap-2">
@@ -436,16 +468,6 @@ export function FileUpload() {
           </div>
         </div>
       )}
-
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">Bulk File Splitter</h2>
-        <BulkSplitter />
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">Metafields Wizard</h2>
-        <MetafieldsWizard existingHeaders={result?.headers ?? []} />
-      </section>
     </div>
   );
 }
