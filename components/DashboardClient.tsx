@@ -57,6 +57,7 @@ function formatActivityLabel(entry: ActivityLogEntry): string {
 export function DashboardClient() {
   const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>([]);
+  const [activityLoading, setActivityLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [mergeSnapshotId, setMergeSnapshotId] = useState<string>("");
   const [mergePrimaryKey, setMergePrimaryKey] = useState<string>("");
@@ -82,6 +83,7 @@ export function DashboardClient() {
   }, [mergeSnapshotId]);
 
   const fetchActivityLogs = useCallback(async () => {
+    setActivityLoading(true);
     try {
       const res = await fetch("/api/logs?limit=30");
       if (!res.ok) return;
@@ -89,6 +91,8 @@ export function DashboardClient() {
       setActivityLogs(data.logs ?? []);
     } catch {
       // ignore
+    } finally {
+      setActivityLoading(false);
     }
   }, []);
 
@@ -160,7 +164,19 @@ export function DashboardClient() {
           </p>
         </CardHeader>
         <CardContent>
-          {activityLogs.length === 0 ? (
+          {activityLoading ? (
+            <ul className="space-y-2" aria-busy="true" aria-label="Loading activity">
+              {[1, 2, 3].map((i) => (
+                <li
+                  key={i}
+                  className="flex flex-wrap items-baseline justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2"
+                >
+                  <span className="h-4 w-3/4 animate-pulse rounded bg-muted-foreground/20" />
+                  <span className="h-3 w-16 animate-pulse rounded bg-muted-foreground/20" />
+                </li>
+              ))}
+            </ul>
+          ) : activityLogs.length === 0 ? (
             <p className="text-sm text-muted-foreground">No activity yet.</p>
           ) : (
             <ul className="space-y-2">
