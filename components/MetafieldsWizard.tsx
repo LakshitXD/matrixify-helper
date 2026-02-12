@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { Trash2, Plus } from "lucide-react";
 
 const DEFAULT_NAMESPACE = "custom";
+const NEW_COLUMN_VALUE = "__new_column__";
 
 type MetafieldsWizardProps = {
   /** Optional: current CSV headers for "map from column" */
@@ -33,7 +34,7 @@ export function MetafieldsWizard({ existingHeaders = [] }: MetafieldsWizardProps
   const [namespace, setNamespace] = useState(DEFAULT_NAMESPACE);
   const [key, setKey] = useState("");
   const [type, setType] = useState<string>(SHOPIFY_METAFIELD_TYPES[0]);
-  const [mapFromColumn, setMapFromColumn] = useState<string>("");
+  const [mapFromColumn, setMapFromColumn] = useState<string>(NEW_COLUMN_VALUE);
   const [includeStandardColumns, setIncludeStandardColumns] = useState(true);
 
   const addMetafield = () => {
@@ -45,11 +46,11 @@ export function MetafieldsWizard({ existingHeaders = [] }: MetafieldsWizardProps
         namespace: namespace.trim() || DEFAULT_NAMESPACE,
         key: k,
         type: type || SHOPIFY_METAFIELD_TYPES[0],
-        ...(mapFromColumn ? { mapFromColumn } : {}),
+        ...(mapFromColumn && mapFromColumn !== NEW_COLUMN_VALUE ? { mapFromColumn } : {}),
       },
     ]);
     setKey("");
-    setMapFromColumn("");
+    setMapFromColumn(NEW_COLUMN_VALUE);
   };
 
   const removeMetafield = (index: number) => {
@@ -138,7 +139,7 @@ export function MetafieldsWizard({ existingHeaders = [] }: MetafieldsWizardProps
                     <SelectValue placeholder="New column" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">New column</SelectItem>
+                    <SelectItem value={NEW_COLUMN_VALUE}>New column</SelectItem>
                     {existingHeaders.map((h) => (
                       <SelectItem key={h} value={h}>
                         {h}
