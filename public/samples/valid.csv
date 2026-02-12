@@ -1,0 +1,6 @@
+Handle,Title,Variant SKU,Option1 Name,Option1 Value,Option2 Name,Option2 Value,Variant Price
+blue-tshirt,Blue T-Shirt,SKU-001,Size,S,Color,Blue,19.99
+blue-tshirt,Blue T-Shirt,SKU-002,Size,M,Color,Blue,19.99
+blue-tshirt,Blue T-Shirt,SKU-003,Size,L,Color,Blue,19.99
+red-hat,Red Hat,SKU-004,,,Color,Red,24.99
+red-hat,Red Hat,SKU-005,,,Color,Navy,24.99
